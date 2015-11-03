@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE nta PUBLIC '-//Uppaal Team//DTD Flat System 1.1//EN' 'http://www.it.uu.se/research/group/darts/uppaal/flat-1_2.dtd'>
+<nta>
+	<declaration>// Place global declarations here.
+//min_delay - main criteria
+const int N = 9;
+const int M = 3;
+int CPU1_C, CPU2_C, CPU3_C;
+chan CPU1_use, CPU1_done;
+chan CPU2_use, CPU2_done;
+chan CPU3_use, CPU3_done;
+int jobs_status[N]={0,0,0,0,0,0,0,0,0};
+int current_execute[M]={0,0,0};
+
+int global_delay = 0;
+int done_counter=0;
+clock total_time;
+
+
+
+</declaration>
+	<template>
+		<name x="5" y="5">CPU</name>
+		<parameter>chan &amp; use, chan &amp; done, int &amp; C, const int num</parameter>
+		<declaration>// Place local declarations here.
+
+//warm redundancy of CPU_1
+
+//job G have control point resiliency --&gt; CP
+//interval between two neighbouring point --&gt; 5
+//time for checkpoint creation --&gt; 1
+//execution time for G --&gt; 8  9  11
+
+clock x;
+clock y;
+//время, затрачиваемое на создание контрольных точек, рассчитывается исходя из C
+//частное от деления на 5 плюс 1, так как в конце тоже создается контрольная точка
+int delta = 0;
+int local_delay = 0;
+
+void init_state(){
+	x = 0;
+	if (current_execute[num-1] == 7)
+		delta = C/5 + 1;
+}
+
+void update_delay(){
+	local_delay++;
+	global_delay++;
+}
+
+bool control_point(){
+	//if job G executes then create control points
+	return (current_execute[num-1] == 7);
+}
+</declaration>
+		<location id="id0" x="-112" y="48">
+			<name x="-120" y="16">create_control_point</name>
+			<label kind="invariant" x="-122" y="63">y&lt;=1</label>
+		</location>
+		<location id="id1" x="-520" y="-32">
+			<name x="-504" y="-40">cpu_failure</name>
+			<urgent/>
+		</location>
+		<location id="id2" x="-256" y="-328">
+			<name x="-272" y="-360">delay</name>
+			<urgent/>
+		</location>
+		<location id="id3" x="-256" y="-80">
+			<name x="-272" y="-128">InUse</name>
+			<label kind="invariant" x="-280" y="-112">x &lt;= C+delta</label>
+		</location>
+		<location id="id4" x="-256" y="-208">
+			<name x="-272" y="-192">idle</name>
+		</location>
+		<init ref="id4"/>
+		<transition>
+			<source ref="id0"/>
+			<target ref="id3"/>
+			<nail x="-224" y="24"/>
+		</transition>
+		<transition>
+			<source ref="id3"/>
+			<target ref="id0"/>
+			<label kind="guard" x="-176" y="-64">control_point()</label>
+			<label kind="assignment" x="-136" y="-48">y = 0</label>
+			<nail x="-152" y="-32"/>
+		</transition>
+		<transition>
+			<source ref="id1"/>
+			<target ref="id3"/>
+			<label kind="assignment" x="-448" y="-104">x=0</label>
+			<nail x="-520" y="-80"/>
+		</transition>
+		<transition>
+			<source ref="id3"/>
+			<target ref="id1"/>
+			<label kind="guard" x="-504" y="40">total_time == 15 &amp;&amp; num == 1</label>
+			<nail x="-256" y="64"/>
+			<nail x="-520" y="64"/>
+		</transition>
+		<transition>
+			<source ref="id2"/>
+			<target ref="id4"/>
+			<label kind="assignment" x="-200" y="-272">update_delay()</label>
+			<nail x="-208" y="-264"/>
+		</transition>
+		<transition>
+			<source ref="id4"/>
+			<target ref="id2"/>
+			<label kind="guard" x="-448" y="-272">(x - C) &gt; local_delay</label>
+			<nail x="-304" y="-264"/>
+		</transition>
+		<transition>
+			<source ref="id3"/>
+			<target ref="id4"/>
+			<label kind="guard" x="-456" y="-168">x == C + delta</label>
+			<label kind="synchronisation" x="-424" y="-152">done!</label>
+			<nail x="-352" y="-128"/>
+			<nail x="-352" y="-208"/>
+		</transition>
+		<transition>
+			<source ref="id4"/>
+			<target ref="id3"/>
+			<label kind="synchronisation" x="-144" y="-168">use?</label>
+			<label kind="assignment" x="-144" y="-144">init_state()</label>
+			<nail x="-160" y="-208"/>
+			<nail x="-160" y="-80"/>
+		</transition>
+	</template>
+	<template>
+		<name>Job</name>
+		<parameter>const int num, const int dept1, const int dept2, const int C1, const int C2, const int C3</parameter>
+		<declaration>//check dependencies
+//use global variable -&gt; array jobs_status
+
+//job G have control point resiliency --&gt; CP
+//interval between two neighbouring point --&gt; 5
+//time for checkpoint creation --&gt; 1
+
+int can_start(const int &amp; cpu_num) {
+	
+	if (current_execute[cpu_num-1] != 0 &amp;&amp; current_execute[cpu_num-1] != num)
+		return 0;
+	
+	if (dept1 == 0)
+		return 1;
+
+	if (jobs_status[dept1-1] == 1 &amp;&amp; dept2 == 0)
+		return 1;
+
+	if (jobs_status[dept1-1] == 1 &amp;&amp; dept2 != 0 &amp;&amp; jobs_status[dept2-1] == 1)
+		return 1;
+
+	return 0;
+}
+
+void modify_global_vars(const int &amp; cpu_num){
+	done_counter++;
+	jobs_status[num-1] = 1;
+	current_execute[cpu_num-1] = 0;
+}
+
+void set_cpu_params(const int &amp; cpu_num){
+	current_execute[cpu_num-1] = num;			
+	
+    if (cpu_num == 1){
+		CPU1_C = C1;
+        return;
+    }
+
+    if (cpu_num == 2){
+		CPU2_C = C2;
+        return;
+    }
+    
+    if (cpu_num == 3){
+		CPU3_C = C3;
+        return;
+    }
+}
+
+int execute_status(){
+	return jobs_status[num-1];
+}</declaration>
+		<location id="id5" x="-232" y="-368">
+			<name x="-216" y="-376">CPU_3</name>
+		</location>
+		<location id="id6" x="-232" y="-224">
+			<name x="-208" y="-232">End</name>
+		</location>
+		<location id="id7" x="-408" y="-312">
+			<name x="-480" y="-320">CPU_1</name>
+		</location>
+		<location id="id8" x="-56" y="-312">
+			<name x="-32" y="-320">CPU_2</name>
+		</location>
+		<location id="id9" x="-232" y="-496">
+			<name x="-216" y="-488">Start</name>
+		</location>
+		<init ref="id9"/>
+		<transition>
+			<source ref="id6"/>
+			<target ref="id9"/>
+			<label kind="guard" x="-80" y="-128">execute_status()==0</label>
+			<nail x="-232" y="-104"/>
+			<nail x="192" y="-104"/>
+			<nail x="184" y="-624"/>
+			<nail x="-232" y="-624"/>
+		</transition>
+		<transition>
+			<source ref="id5"/>
+			<target ref="id6"/>
+			<label kind="synchronisation" x="-320" y="-344">CPU3_done?</label>
+			<label kind="assignment" x="-352" y="-328">modify_global_vars(3)</label>
+		</transition>
+		<transition>
+			<source ref="id9"/>
+			<target ref="id5"/>
+			<label kind="guard" x="-376" y="-464">can_start(3) == 1</label>
+			<label kind="synchronisation" x="-352" y="-448">CPU3_use!</label>
+			<label kind="assignment" x="-376" y="-432">set_cpu_params(3)</label>
+		</transition>
+		<transition>
+			<source ref="id8"/>
+			<target ref="id6"/>
+			<label kind="synchronisation" x="-128" y="-272">CPU2_done?</label>
+			<label kind="assignment" x="-168" y="-248">modify_global_vars(2)</label>
+		</transition>
+		<transition>
+			<source ref="id7"/>
+			<target ref="id6"/>
+			<label kind="synchronisation" x="-408" y="-272">CPU1_done?</label>
+			<label kind="assignment" x="-432" y="-248">modify_global_vars(1)</label>
+		</transition>
+		<transition>
+			<source ref="id9"/>
+			<target ref="id8"/>
+			<label kind="guard" x="-48" y="-448">can_start(2) == 1</label>
+			<label kind="synchronisation" x="-24" y="-432">CPU2_use!</label>
+			<label kind="assignment" x="-48" y="-416">set_cpu_params(2)</label>
+			<nail x="-56" y="-496"/>
+		</transition>
+		<transition>
+			<source ref="id9"/>
+			<target ref="id7"/>
+			<label kind="guard" x="-544" y="-448">can_start(1) == 1</label>
+			<label kind="synchronisation" x="-520" y="-432">CPU1_use!</label>
+			<label kind="assignment" x="-552" y="-416">set_cpu_params(1)</label>
+			<nail x="-408" y="-496"/>
+		</transition>
+	</template>
+	<system>// Place template instantiations here.
+CPU1 = CPU(CPU1_use, CPU1_done, CPU1_C,1);
+CPU2 = CPU(CPU2_use, CPU2_done, CPU2_C,2);
+CPU3 = CPU(CPU3_use, CPU3_done, CPU3_C,3);
+JobA = Job(1,0,0,6,2,5);
+JobB = Job(2,0,0,3,3,4);
+JobC = Job(3,2,0,5,3,5);
+JobD = Job(4,2,3,9,8,6);
+JobE = Job(5,2,0,4,2,3);
+JobF = Job(6,3,0,12,12,11);
+JobG = Job(7,3,4,8,9,11);
+JobH = Job(8,5,7,5,3,1);
+JobI = Job(9,5,0,6,5,6);
+
+// List one or more processes to be composed into a system.
+system JobA, JobB, JobC, JobD, JobE, JobF, JobG, JobH, JobI, CPU1, CPU2, CPU3;</system>
+	<queries>
+	</queries>
+</nta>
